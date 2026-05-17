@@ -2,7 +2,7 @@
 using System.ServiceModel;
 using DronWcfService;
 
-namespace DroneCliente
+namespace DronCliente
 {
     class Program
     {
