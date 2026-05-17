@@ -9,9 +9,14 @@ namespace DronWcfService
     public interface IDroneService
     {
         [OperationContract]
+        [FaultContract(typeof(DataFormatFaultDetail))]
+        [FaultContract(typeof(ValidationFaultDetail))]
         string StartSession(DroneSessionMeta meta);
 
+
         [OperationContract]
+        [FaultContract(typeof(DataFormatFaultDetail))]
+        [FaultContract(typeof(ValidationFaultDetail))]
         string PushSample(DroneSample sample);
 
         [OperationContract]

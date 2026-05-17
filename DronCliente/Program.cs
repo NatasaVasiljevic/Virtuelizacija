@@ -11,6 +11,17 @@ namespace DroneCliente
         {
             Console.WriteLine("[KLIJENT] Pokretanje...");
 
+            string csvPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "flights_data.csv");
+            string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "invalid_rows.log");
+
+            if (!File.Exists(csvPath))
+            {
+                Console.WriteLine($"[GRESKA] CSV fajl nije pronadjen: {csvPath}");
+                Console.WriteLine("Stavi flights_data.csv u isti folder kao DroneCliente.exe");
+                Console.ReadLine();
+                return;
+            }
+
             var binding = new NetTcpBinding()
             {
                 MaxReceivedMessageSize = 10485760,
@@ -29,32 +40,37 @@ namespace DroneCliente
                     var samples = reader.ReadSamples();
                     Console.WriteLine($"[KLIJENT] Ucitano {samples.Count} uzoraka iz CSV-a.");
 
-                var meta = new DroneSessionMeta
-                {
-                    SessionId = Guid.NewGuid().ToString(),
-                    StartTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-                };
+                    var meta = new DroneSessionMeta
+                    {
+                        SessionId = Guid.NewGuid().ToString(),
+                        StartTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                    };
 
-                string response = proxy.StartSession(meta);
-                Console.WriteLine($"[KLIJENT] StartSession -> {response}");
+                    string response = proxy.StartSession(meta);
+                    Console.WriteLine($"[KLIJENT] StartSession -> {response}");
 
                     int sent = 0, rejected = 0;
 
                     for (int i = 0; i < samples.Count; i++)
                     {
                         var s = samples[i];
-                var sample = new DroneSample
-                {
+                        var sample = new DroneSample
+                        {
                             LinearAccelerationX = s.LinearAccelerationX,
                             LinearAccelerationY = s.LinearAccelerationY,
                             LinearAccelerationZ = s.LinearAccelerationZ,
                             WindSpeed = s.WindSpeed,
                             WindAngle = s.WindAngle,
                             Time = s.Time
-                };
+                        };
 
-                response = proxy.PushSample(sample);
-                Console.WriteLine($"[KLIJENT] PushSample -> {response}");
+                        try
+                        {
+                            response = proxy.PushSample(sample);
+                            if (response.StartsWith("ACK"))
+                                sent++;
+                            else
+                            {
                                 Console.WriteLine($"[KLIJENT] Uzorak {i + 1} odbacen: {response}");
                                 rejected++;
                             }
@@ -71,30 +87,30 @@ namespace DroneCliente
                         }
                     }
 
-                response = proxy.EndSession();
-                Console.WriteLine($"[KLIJENT] EndSession -> {response}");
+                    response = proxy.EndSession();
+                    Console.WriteLine($"[KLIJENT] EndSession -> {response}");
                     Console.WriteLine($"[KLIJENT] Poslato: {sent}, Odbaceno: {rejected}");
                 }
             }
             catch (FaultException<DataFormatFaultDetail> ex)
             {
                 Console.WriteLine($"[GRESKA] DataFormatFault: {ex.Detail.Message}");
-                }
+            }
             catch (FaultException<ValidationFaultDetail> ex)
             {
                 Console.WriteLine($"[GRESKA] ValidationFault: {ex.Detail.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[GREŠKA] {ex.Message}");
+                Console.WriteLine($"[GRESKA] {ex.Message}");
             }
             finally
             {
-                ((IClientChannel)proxy).Close();
-                factory.Close();
+                try { ((IClientChannel)proxy).Close(); } catch { ((IClientChannel)proxy).Abort(); }
+                try { factory.Close(); } catch { factory.Abort(); }
             }
 
-            Console.WriteLine("[KLIJENT] Pritisni Enter za izlaz...");
+            Console.WriteLine("[KLIJENT] Gotovo. Pritisni Enter za izlaz...");
             Console.ReadLine();
         }
     }
