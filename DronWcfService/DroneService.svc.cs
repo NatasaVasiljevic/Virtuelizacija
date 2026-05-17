@@ -1,7 +1,7 @@
 ﻿using System;
 using System.ServiceModel;
 
-namespace DronWcfService
+namespace DroneWcfService
 {
     public class DroneService : IDroneService
     {

@@ -1,4 +1,4 @@
-﻿using DronWcfService;
+﻿using DroneWcfService;
 using System;
 using System.IO;
 using System.ServiceModel;

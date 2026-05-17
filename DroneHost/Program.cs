@@ -1,6 +1,6 @@
 ﻿using System;
 using System.ServiceModel;
-using DronWcfService;
+using DroneWcfService;
 
 namespace DroneHost
 {

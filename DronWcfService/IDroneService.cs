@@ -1,7 +1,7 @@
 ﻿using System.Runtime.Serialization;
 using System.ServiceModel;
 
-namespace DronWcfService
+namespace DroneWcfService
 {
     //TACKA 1 - Skica sistema i pravila protokola
     //TACKA 2 - WCF servis, konfiguracija i ugovori
