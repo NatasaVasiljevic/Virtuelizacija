@@ -1,6 +1,7 @@
-﻿using System;
+﻿using DronWcfService;
+using System;
+using System.IO;
 using System.ServiceModel;
-using DronWcfService;
 
 namespace DroneCliente
 {
@@ -18,13 +19,16 @@ namespace DroneCliente
             };
 
             var endpoint = new EndpointAddress("net.tcp://localhost:8733/DroneService/");
-
             var factory = new ChannelFactory<IDroneService>(binding, endpoint);
             IDroneService proxy = factory.CreateChannel();
 
             try
             {
-                // StartSession
+                using (var reader = new CsvDroneReader(csvPath, logPath))
+                {
+                    var samples = reader.ReadSamples();
+                    Console.WriteLine($"[KLIJENT] Ucitano {samples.Count} uzoraka iz CSV-a.");
+
                 var meta = new DroneSessionMeta
                 {
                     SessionId = Guid.NewGuid().ToString(),
@@ -34,23 +38,51 @@ namespace DroneCliente
                 string response = proxy.StartSession(meta);
                 Console.WriteLine($"[KLIJENT] StartSession -> {response}");
 
-                // PushSample (test uzorak)
+                    int sent = 0, rejected = 0;
+
+                    for (int i = 0; i < samples.Count; i++)
+                    {
+                        var s = samples[i];
                 var sample = new DroneSample
                 {
-                    LinearAccelerationX = 0.1,
-                    LinearAccelerationY = 0.2,
-                    LinearAccelerationZ = 9.8,
-                    WindSpeed = 5.0,
-                    WindAngle = 45.0,
-                    Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                            LinearAccelerationX = s.LinearAccelerationX,
+                            LinearAccelerationY = s.LinearAccelerationY,
+                            LinearAccelerationZ = s.LinearAccelerationZ,
+                            WindSpeed = s.WindSpeed,
+                            WindAngle = s.WindAngle,
+                            Time = s.Time
                 };
 
                 response = proxy.PushSample(sample);
                 Console.WriteLine($"[KLIJENT] PushSample -> {response}");
+                                Console.WriteLine($"[KLIJENT] Uzorak {i + 1} odbacen: {response}");
+                                rejected++;
+                            }
+                        }
+                        catch (FaultException<DataFormatFaultDetail> ex)
+                        {
+                            Console.WriteLine($"[KLIJENT] Format greska na uzorku {i + 1}: [{ex.Detail.FieldName}] {ex.Detail.Message}");
+                            rejected++;
+                        }
+                        catch (FaultException<ValidationFaultDetail> ex)
+                        {
+                            Console.WriteLine($"[KLIJENT] Validacija greska na uzorku {i + 1}: [{ex.Detail.FieldName}] {ex.Detail.Message}");
+                            rejected++;
+                        }
+                    }
 
-                // EndSession
                 response = proxy.EndSession();
                 Console.WriteLine($"[KLIJENT] EndSession -> {response}");
+                    Console.WriteLine($"[KLIJENT] Poslato: {sent}, Odbaceno: {rejected}");
+                }
+            }
+            catch (FaultException<DataFormatFaultDetail> ex)
+            {
+                Console.WriteLine($"[GRESKA] DataFormatFault: {ex.Detail.Message}");
+                }
+            catch (FaultException<ValidationFaultDetail> ex)
+            {
+                Console.WriteLine($"[GRESKA] ValidationFault: {ex.Detail.Message}");
             }
             catch (Exception ex)
             {
