@@ -3,7 +3,7 @@ using System;
 using System.IO;
 using System.ServiceModel;
 
-namespace DronCliente
+namespace DroneCliente
 {
     class Program
     {
