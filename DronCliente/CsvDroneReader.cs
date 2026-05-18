@@ -40,12 +40,12 @@ namespace DroneCliente
             }
 
             string[] headers = headerLine.Split(',');
-            int idxAx = IndexOf(headers, "LinearAccelerationX");
-            int idxAy = IndexOf(headers, "LinearAccelerationY");
-            int idxAz = IndexOf(headers, "LinearAccelerationZ");
-            int idxWs = IndexOf(headers, "WindSpeed");
-            int idxWa = IndexOf(headers, "WindAngle");
-            int idxTime = IndexOf(headers, "Time");
+            int idxAx = IndexOf(headers, "linear_acceleration_x");
+            int idxAy = IndexOf(headers, "linear_acceleration_y");
+            int idxAz = IndexOf(headers, "linear_acceleration_z");
+            int idxWs = IndexOf(headers, "wind_speed");
+            int idxWa = IndexOf(headers, "wind_angle");
+            int idxTime = IndexOf(headers, "time");
 
             if (idxAz < 0 || idxWs < 0)
             {
