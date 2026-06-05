@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -40,12 +40,12 @@ namespace DroneCliente
             }
 
             string[] headers = headerLine.Split(',');
-            int idxAx = IndexOf(headers, "linear_acceleration_x");
-            int idxAy = IndexOf(headers, "linear_acceleration_y");
-            int idxAz = IndexOf(headers, "linear_acceleration_z");
-            int idxWs = IndexOf(headers, "wind_speed");
-            int idxWa = IndexOf(headers, "wind_angle");
-            int idxTime = IndexOf(headers, "time");
+            int idxAx = IndexOf(headers, "linear_acceleration_x", "LinearAccelerationX");
+            int idxAy = IndexOf(headers, "linear_acceleration_y", "LinearAccelerationY");
+            int idxAz = IndexOf(headers, "linear_acceleration_z", "LinearAccelerationZ");
+            int idxWs = IndexOf(headers, "wind_speed", "WindSpeed");
+            int idxWa = IndexOf(headers, "wind_angle", "WindAngle");
+            int idxTime = IndexOf(headers, "time", "Time");
 
             if (idxAz < 0 || idxWs < 0)
             {
@@ -87,9 +87,9 @@ namespace DroneCliente
                     continue;
                 }
 
-                if (ws < 0)
+                if (ws <= 0)
                 {
-                    _logWriter.WriteLine($"[LOG] Red {rowNumber}: NEVALIDAN - WindSpeed je negativan: {ws}");
+                    _logWriter.WriteLine($"[LOG] Red {rowNumber}: NEVALIDAN - WindSpeed nije pozitivan: {ws}");
                     continue;
                 }
 
@@ -125,11 +125,12 @@ namespace DroneCliente
             return samples;
         }
 
-        private int IndexOf(string[] arr, string name)
+        private int IndexOf(string[] arr, params string[] names)
         {
             for (int i = 0; i < arr.Length; i++)
-                if (arr[i].Trim().Equals(name, StringComparison.OrdinalIgnoreCase))
-                    return i;
+                foreach (string name in names)
+                    if (arr[i].Trim().Equals(name, StringComparison.OrdinalIgnoreCase))
+                        return i;
             return -1;
         }
 

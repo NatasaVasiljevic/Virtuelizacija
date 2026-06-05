@@ -1,7 +1,9 @@
-﻿using System;
+using System;
 using System.Configuration;
+using System.Globalization;
 using System.IO;
 using System.ServiceModel;
+using System.Text;
 
 namespace DroneWcfService
 {
@@ -21,10 +23,12 @@ namespace DroneWcfService
             var manager = new DroneEventManager();
 
             // Ucitavamo pragove iz konfiguracije
-            double.TryParse(ConfigurationManager.AppSettings["W_threshold"], out double wt);
-            double.TryParse(ConfigurationManager.AppSettings["Az_threshold"], out double az);
+            double.TryParse(ConfigurationManager.AppSettings["W_threshold"], NumberStyles.Float, CultureInfo.InvariantCulture, out double wt);
+            double.TryParse(ConfigurationManager.AppSettings["Az_threshold"], NumberStyles.Float, CultureInfo.InvariantCulture, out double az);
+            double.TryParse(ConfigurationManager.AppSettings["AzDeviationPercent"], NumberStyles.Float, CultureInfo.InvariantCulture, out double deviation);
             manager.W_threshold = wt > 0 ? wt : 50.0;
             manager.Az_threshold = az > 0 ? az : 5.0;
+            manager.AzDeviationPercent = deviation > 0 ? deviation : 25.0;
 
             // Pretplata na evente
             manager.OnTransferStarted += sessionId =>
@@ -53,7 +57,14 @@ namespace DroneWcfService
             if (string.IsNullOrWhiteSpace(meta.StartTime))
                 throw new FaultException<DataFormatFaultDetail>(
                     new DataFormatFaultDetail { FieldName = "StartTime", Message = "StartTime je obavezno polje." });
+            if (string.IsNullOrWhiteSpace(meta.Time))
+                throw new FaultException<DataFormatFaultDetail>(
+                    new DataFormatFaultDetail { FieldName = "Time", Message = "Time u meta-zaglavlju je obavezno polje." });
+            if (meta.WindSpeed <= 0)
+                throw new FaultException<ValidationFaultDetail>(
+                    new ValidationFaultDetail { FieldName = "WindSpeed", Message = "WindSpeed u meta-zaglavlju mora biti > 0.", ActualValue = meta.WindSpeed, AllowedRange = "> 0" });
 
+            CloseSessionResources();
             _sessionId = meta.SessionId;
 
             // Zadatak 6 - kreiranje fajlova
@@ -61,8 +72,12 @@ namespace DroneWcfService
             if (!Directory.Exists(folder))
                 Directory.CreateDirectory(folder);
 
-            string measurementsFile = Path.Combine(folder, $"measurements_{_sessionId}.csv");
-            string rejectsFile = Path.Combine(folder, $"rejects_{_sessionId}.csv");
+            string sessionFolder = Path.Combine(folder, _sessionId);
+            if (!Directory.Exists(sessionFolder))
+                Directory.CreateDirectory(sessionFolder);
+
+            string measurementsFile = Path.Combine(sessionFolder, "measurements_session.csv");
+            string rejectsFile = Path.Combine(sessionFolder, "rejects.csv");
 
             _measurementsStream = new FileStream(measurementsFile, FileMode.Create, FileAccess.Write);
             _measurementsWriter = new StreamWriter(_measurementsStream);
@@ -95,16 +110,16 @@ namespace DroneWcfService
             if (string.IsNullOrWhiteSpace(sample.Time))
                 throw new FaultException<DataFormatFaultDetail>(
                     new DataFormatFaultDetail { FieldName = "Time", Message = "Polje Time je obavezno." });
-            if (sample.WindSpeed < 0)
+            if (sample.WindSpeed <= 0)
             {
-                _rejectsWriter?.WriteLine($"{sample.Time},WindSpeed negativan: {sample.WindSpeed}");
+                _rejectsWriter?.WriteLine($"{sample.Time},WindSpeed nije pozitivan: {sample.WindSpeed}");
                 throw new FaultException<ValidationFaultDetail>(
                     new ValidationFaultDetail
                     {
                         FieldName = "WindSpeed",
-                        Message = "WindSpeed mora biti >= 0.",
+                        Message = "WindSpeed mora biti > 0.",
                         ActualValue = sample.WindSpeed,
-                        AllowedRange = ">= 0"
+                        AllowedRange = "> 0"
                     });
             }
             if (sample.WindAngle < -180 || sample.WindAngle > 360)
@@ -138,8 +153,8 @@ namespace DroneWcfService
                     new ValidationFaultDetail { FieldName = "LinearAccelerationZ", Message = "Vrednost nije validna (NaN/Infinity)." });
             }
 
-            // Zadatak 6 - snimanje u csv
-            _measurementsWriter?.WriteLine($"{sample.Time},{sample.LinearAccelerationX},{sample.LinearAccelerationY},{sample.LinearAccelerationZ},{sample.WindSpeed},{sample.WindAngle}");
+            // Zadatak 6 i MemoryStream - privremeno cuvanje pa upis u csv
+            WriteSampleThroughMemoryStream(sample);
 
             // Zadatak 7 - sekvencijalni ispis
             Console.WriteLine($"[SERVER] Prenos u toku... Az={sample.LinearAccelerationZ:F2}, WindSpeed={sample.WindSpeed:F2}, Time={sample.Time}");
@@ -155,6 +170,43 @@ namespace DroneWcfService
             Console.WriteLine($"[SERVER] Sesija završena: {_sessionId}");
 
             // Zadatak 6 - zatvaranje fajlova
+            CloseSessionResources();
+
+            // Zadatak 7 - završen prenos
+            Console.WriteLine("[SERVER] Završen prenos.");
+
+            // Zadatak 8 - podizemo event
+            _eventManager.FireTransferCompleted(_sessionId);
+
+            _sessionId = null;
+            return "ACK|COMPLETED";
+        }
+
+        private static void WriteSampleThroughMemoryStream(DroneSample sample)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(ToCsvLine(sample) + Environment.NewLine);
+
+            using (var memoryStream = new MemoryStream(payload))
+            using (var reader = new StreamReader(memoryStream, Encoding.UTF8))
+            {
+                string csvLine = reader.ReadLine();
+                _measurementsWriter?.WriteLine(csvLine);
+            }
+        }
+
+        private static string ToCsvLine(DroneSample sample)
+        {
+            return string.Join(",",
+                sample.Time,
+                sample.LinearAccelerationX.ToString(CultureInfo.InvariantCulture),
+                sample.LinearAccelerationY.ToString(CultureInfo.InvariantCulture),
+                sample.LinearAccelerationZ.ToString(CultureInfo.InvariantCulture),
+                sample.WindSpeed.ToString(CultureInfo.InvariantCulture),
+                sample.WindAngle.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void CloseSessionResources()
+        {
             _measurementsWriter?.Close();
             _measurementsWriter?.Dispose();
             _measurementsStream?.Dispose();
@@ -166,15 +218,7 @@ namespace DroneWcfService
             _measurementsStream = null;
             _rejectsWriter = null;
             _rejectsStream = null;
-
-            // Zadatak 7 - završen prenos
-            Console.WriteLine("[SERVER] Završen prenos.");
-
-            // Zadatak 8 - podizemo event
-            _eventManager.FireTransferCompleted(_sessionId);
-
-            _sessionId = null;
-            return "ACK|COMPLETED";
         }
+
     }
 }
